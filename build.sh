@@ -2,15 +2,6 @@
 set -euo pipefail
 
 export GNUPGHOME=/home/builder/.gnupg
-chmod 0700 "$GNUPGHOME"
-
-# Import keys if present
-if [ -f "$GNUPGHOME/secret.gpg" ]; then
-    gpg --batch --yes --import "$GNUPGHOME/secret.gpg"
-fi
-if [ -f "$GNUPGHOME/pubkey.gpg" ]; then
-    gpg --batch --yes --import "$GNUPGHOME/pubkey.gpg"
-fi
 
 REPO_DIR=/repo
 PKGLIST_FILE=${PKGLIST_FILE:-/repo/pkglist.txt}
@@ -21,11 +12,25 @@ BASE_REPO_ARGS="-s -v"
 REPO_ARGS="${BASE_REPO_ARGS}"
 
 if [ -n "$GPG_KEY" ]; then
-    gpg --batch --yes --trust-model always --import-ownertrust <<EOF
-${GPG_KEY}:6:
+    if [ ! -f "${GNUPGHOME}/trustdb.gpg" ]; then
+        gpg --batch --yes --update-trustdb
+    fi
+
+    gpg --batch --yes --import $GNUPGHOME/private.key
+    gpg --batch --yes --import $GNUPGHOME/pubkey.key
+
+    FPR=$(gpg --list-keys --with-colons "$GPG_KEY" | awk -F: '/fpr/ {print $10; exit}')
+    if [ -n "$FPR" ]; then
+        gpg --batch --yes --trust-model always --import-ownertrust <<EOF
+${FPR}:6:
 EOF
-    BUILD_ARGS="${BUILD_ARGS} --sign --key ${GPG_KEY}"
-    REPO_ARGS="${REPO_ARGS} --sign --key ${GPG_KEY}"
+
+        BUILD_ARGS="${BUILD_ARGS} --sign --key ${FPR}"
+        REPO_ARGS="${REPO_ARGS} --sign --key ${FPR}"
+    else
+        echo "ERROR: Could not find fingerprint for GPG key ${GPG_KEY}"
+        exit 1
+    fi
 fi
 
 mkdir -p "${REPO_DIR}"
@@ -72,7 +77,7 @@ for pkg in "${PACKAGES[@]}"; do
         echo "==> Resolving dependencies for ${pkg}..."
         all_deps=("${depends[@]:-}" "${makedepends[@]:-}")
         if [ ${#all_deps[@]} -gt 0 ]; then
-            sudo pacman -S --noconfirm --needed --asdeps "${all_deps[@]}"
+            yay -Sy --noconfirm --needed --asdeps "${all_deps[@]}"
         fi
 
         echo "==> Building ${pkg} ${pkg_fullver}..."
