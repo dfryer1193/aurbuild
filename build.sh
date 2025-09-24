@@ -93,5 +93,5 @@ echo "=>> Cleaning up old packages..."
 paccache -r -k 2 -c "${REPO_DIR}"
 
 echo "=>> Updating repo..."
-repo-add ${REPO_ARGS} "${REPO_DIR}/repo.db.tar.gz" "${REPO_DIR}/"*.pkg.tar.zst
+repo-add ${REPO_ARGS} "${REPO_DIR}/aur.db.tar.gz" "${REPO_DIR}/"*.pkg.tar.zst
 
